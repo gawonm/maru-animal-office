@@ -69,6 +69,7 @@
   #report p { margin:4px 0 0; white-space:pre-wrap; line-height:1.5; }
   #report:empty::before { content:"업무를 시키면 여기에 결과가 쌓여요"; opacity:.6; }
   .talk .txt { white-space:pre-line; }
+  .card h2 .mini { float:right; padding:1px 10px; font-size:11px; border-width:2px; box-shadow:none; background:var(--cream); color:var(--ink); }
 
   form { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
   input { flex:1; min-width:180px; padding:10px 16px; border:4px solid var(--ink); border-radius:999px; font:inherit; background:var(--cream); color:var(--ink); }
@@ -98,7 +99,7 @@
   </div>
   <div class="side">
     <div class="card"><h2>📌 출근부</h2><ul id="board"></ul></div>
-    <div class="card"><h2>📑 결과 보고서</h2><ul id="report"></ul></div>
+    <div class="card"><h2>📑 결과 보고서 <button type="button" class="mini" id="save">💾 저장</button></h2><ul id="report"></ul></div>
     <div class="card"><h2>📒 업무 일지</h2><ul id="log"></ul></div>
   </div>
 </div>
@@ -329,12 +330,32 @@ async function ask(kind, d, task, notes = "") {
   } catch { addLog(`⚠️ ${d.p.name}: 서버 연결 실패`); return null; }
 }
 const short = (t, n = 110) => t.length > n ? t.slice(0, n) + "… (보고서 참고)" : t;
+let curTask = "";
 function report(title, text) {
   const li = document.createElement("li");
   li.innerHTML = "<b></b><p></p>";
+  li.dataset.task = curTask;
   li.querySelector("b").textContent = title; li.querySelector("p").textContent = text;
   document.getElementById("report").prepend(li);
 }
+// 결과 보고서를 업무별로 묶어 .md 파일로 내려받기 (오래된 업무부터)
+function reportMarkdown() {
+  let md = `# 🌸 마루네 동물 오피스 보고서\n\n저장: ${new Date().toLocaleString("ko-KR")}\n`, last = null;
+  [...document.querySelectorAll("#report li")].reverse().forEach(li => {
+    if (li.dataset.task !== last) { last = li.dataset.task; md += `\n## 업무: ${last}\n`; }
+    md += `\n### ${li.querySelector("b").textContent}\n\n${li.querySelector("p").textContent}\n`;
+  });
+  return md;
+}
+document.getElementById("save").onclick = () => {
+  if (!document.querySelector("#report li")) return say("마루", "아직 저장할 보고서가 없어! 일부터 시켜줘~");
+  const stamp = new Date().toLocaleString("sv-SE").slice(0, 16).replace(/\D/g, "");   // 202610271830 (현지 시각)
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([reportMarkdown()], { type: "text/markdown;charset=utf-8" }));
+  a.download = `마루네-보고서-${stamp}.md`;
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  addLog("💾 보고서 저장");
+};
 
 // ---------- 업무 흐름 ----------
 let busy = false;
@@ -368,6 +389,7 @@ function pickTeam(plan, crew) {
 async function run(task) {
   busy = true; document.getElementById("go").disabled = true;
   const [lead, ...crew] = dogs;
+  curTask = task;
   addLog(`📥 새 업무: "${task}"`);
   say(lead.p.name, `"${task}"! 잠깐, 누가 필요한지 볼게~`);
   setState(lead, "work"); emote(lead, "!");
