@@ -10,11 +10,14 @@ ai-office.html 을 띄우고, /api/ask 로 들어온 요청에 Claude 로 답한
 """
 import json
 import os
+import random
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -105,23 +108,30 @@ def ask_cli(body):
     args = [CLAUDE, "-p", "--output-format", "json", "--effort", "low",
             "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--setting-sources", "",
             "--system-prompt", "You voice a character in a cute office game. Reply only with the requested text."]
-    try:
-        with CLI_SLOTS:
-            r = subprocess.run(args, input=f"{system}\n\n{user}", capture_output=True, text=True,
-                               encoding="utf-8", cwd=tempfile.gettempdir(), timeout=180)
-    except subprocess.TimeoutExpired:
-        return None, "Claude Code 응답이 너무 오래 걸려요"
-    except OSError as e:
-        print(f"claude -p 실행 실패: {e}", flush=True)
-        return None, "Claude Code 실행에 실패했어요 (서버 콘솔 참고)"
-    try:
-        data = json.loads(r.stdout)
-    except json.JSONDecodeError:
-        print(f"claude -p rc={r.returncode}: {r.stderr[:300] or r.stdout[:300]}", flush=True)
-        return None, "Claude Code 실행에 실패했어요 (서버 콘솔 참고)"
-    if data.get("is_error") or r.returncode != 0:
-        return None, f"Claude Code: {clip(data.get('result'), 80)}"  # 사용 한도 초과 등
-    return data.get("result", "").strip(), ""
+    for attempt in range(2):
+        try:
+            with CLI_SLOTS:
+                r = subprocess.run(args, input=f"{system}\n\n{user}", capture_output=True, text=True,
+                                   encoding="utf-8", cwd=tempfile.gettempdir(), timeout=180)
+        except subprocess.TimeoutExpired:
+            return None, "Claude Code 응답이 너무 오래 걸려요"
+        except OSError as e:
+            print(f"claude -p 실행 실패: {e}", flush=True)
+            return None, "Claude Code 실행에 실패했어요 (서버 콘솔 참고)"
+        try:
+            data = json.loads(r.stdout)
+        except json.JSONDecodeError:
+            print(f"claude -p rc={r.returncode}: {r.stderr[:300] or r.stdout[:300]}", flush=True)
+            return None, "Claude Code 실행에 실패했어요 (서버 콘솔 참고)"
+        if not data.get("is_error") and r.returncode == 0:
+            return data.get("result", "").strip(), ""
+        msg = str(data.get("result") or "")
+        print(f"claude -p 오류: {msg[:300]}", flush=True)
+        if not re.search(r"authenticat|oauth|login", msg, re.I):
+            return None, f"Claude Code: {clip(msg, 80)}"  # 사용 한도 초과 등
+        # 토큰 만료 순간 여러 프로세스가 동시에 갱신하면 하나만 성공함 → 잠깐 뒤 한 번 더
+        time.sleep(2 + random.random() * 3)
+    return None, "Claude Code 로그인이 만료됐어요 - 터미널에서 claude 실행 후 /login 하고 서버 재시작"
 
 
 class Handler(SimpleHTTPRequestHandler):
