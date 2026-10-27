@@ -137,6 +137,10 @@ def ask_cli(body):
 
 
 class Handler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store")  # 업데이트 후 브라우저가 예전 페이지를 보여주지 않게
+        super().end_headers()
+
     def send_json(self, code, data):
         raw = json.dumps(data, ensure_ascii=False).encode()
         self.send_response(code)
