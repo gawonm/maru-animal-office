@@ -358,27 +358,38 @@ async function work(d, ms, job) {
   d.el.classList.remove("working");
 }
 const hop = d => { d.el.classList.add("happy"); setTimeout(() => d.el.classList.remove("happy"), 1100); };
+// 마루 계획의 첫 줄 "참여: 이름, 이름" 으로 이번 업무에 부를 팀원을 고름
+function pickTeam(plan, crew) {
+  const m = plan?.match(/참여\s*[:：]\s*(.+)/);
+  const team = m ? crew.filter(d => m[1].includes(d.p.name)) : [];
+  // ponytail: 연출 모드거나 형식이 어긋나면 무작위 2~3명
+  return team.length ? team : [...crew].sort(() => Math.random() - .5).slice(0, 2 + (Math.random() < .5));
+}
 async function run(task) {
   busy = true; document.getElementById("go").disabled = true;
   const [lead, ...crew] = dogs;
   addLog(`📥 새 업무: "${task}"`);
-  say(lead.p.name, `"${task}"! 좋아, 다들 2층 사무실로 출발~`);
+  say(lead.p.name, `"${task}"! 잠깐, 누가 필요한지 볼게~`);
   setState(lead, "work"); emote(lead, "!");
   setTimeout(() => setView(2), 1800);   // 카메라가 2층으로 따라감
   dogs.forEach(d => d.result = null);
-  const plan = ask("plan", lead, task);
+  const roster = crew.map(d => `${d.p.name}(${d.p.role}: ${d.p.verb})`).join(", ");
+  const plan = ask("plan", lead, task, roster);
   await goFloor(lead, 2); await moveTo(lead, DESKS[0][0], DESKS[0][1] + 18);
   emote(lead, "…", 0); await work(lead, 1500, plan); emote(lead, "!");
-  say(lead.p.name, short((await plan) || "각자 하나씩 맡아줘~ 화이팅!", 160));
-  addLog(`🐶 ${lead.p.name}: 업무를 ${crew.length}개로 나눔`);
+  const planText = await plan, team = pickTeam(planText, crew), names = team.map(d => d.p.name).join(", ");
+  say(lead.p.name, short(planText?.replace(/^.*참여.*$/m, "").trim() || `${names}! 이번엔 너희가 맡아줘~`, 160));
+  addLog(`🐶 ${lead.p.name}: ${names} 호출 (${crew.length - team.length}명은 휴식)`);
+  crew.filter(d => !team.includes(d) && d.state === "idle").forEach(d => emote(d, "zZ", 2500));
 
-  await Promise.all(crew.map(async (d, i) => {
+  await Promise.all(team.map(async (d, i) => {
     while (d.state === "out" || d.lock) await sleep(300);
     setState(d, "work"); emote(d, "!");
     const job = ask("part", d, task);
     await sleep(i * 250);
     await goFloor(d, 2);
-    await moveTo(d, DESKS[i + 1][0], DESKS[i + 1][1] + 18);
+    const desk = DESKS[crew.indexOf(d) + 1];
+    await moveTo(d, desk[0], desk[1] + 18);
     await work(d, 2500 + Math.random() * 3500, job);
     d.result = await job;
     if (d.result) report(`${d.p.name} · ${d.p.verb}`, d.result);
@@ -386,17 +397,21 @@ async function run(task) {
     addLog(`✅ ${d.p.name}: ${d.p.verb} 완료`);
   }));
 
-  const notes = crew.filter(d => d.result).map(d => `[${d.p.name} / ${d.p.role}]\n${d.result}`).join("\n\n");
+  const done = team.filter(d => d.result);
+  const notes = done.map(d => `[${d.p.name} / ${d.p.role}]\n${d.result}`).join("\n\n");
   emote(lead, "…", 0);
-  lead.result = notes ? await ask("summary", lead, task, notes) : null;
+  // 결과가 2개 이상일 때만 최종 요약을 따로 부름 (1명이면 그 결과가 곧 보고서)
+  lead.result = done.length > 1 ? await ask("summary", lead, task, notes) : null;
   emote(lead, "✓");
   if (lead.result) report(`🎉 ${lead.p.name} 최종 보고`, lead.result);
   say(lead.p.name, lead.result ? short(lead.result, 160) : `보고 완료! "${task}" 끝! 다들 라운지에서 쉬자~ 🦴`);
-  addLog(`🎉 "${task}" 최종 보고 완료`);
-  dogs.forEach(hop);
+  const calls = AI ? 1 + team.length + (done.length > 1 ? 1 : 0) : 0;
+  addLog(`🎉 "${task}" 최종 보고 완료${AI ? ` (Claude 호출 ${calls}번)` : ""}`);
+  const workers = [lead, ...team];
+  workers.forEach(hop);
   await sleep(1200);
   setTimeout(() => setView(1), 2200);
-  await Promise.all(dogs.map(async (d, i) => { await sleep(i * 300); await goFloor(d, 1); setState(d, "idle"); }));
+  await Promise.all(workers.map(async (d, i) => { await sleep(i * 300); await goFloor(d, 1); setState(d, "idle"); }));
   busy = false; document.getElementById("go").disabled = false;
 }
 

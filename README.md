@@ -30,7 +30,8 @@ python server.py
 | 2 | `anthropic` SDK (`pip install anthropic` + `ant auth login` 또는 `ANTHROPIC_API_KEY`) | API 크레딧 |
 | - | 둘 다 없으면 | 연출 모드 (AI 답변 없이 움직임만) |
 
-업무 하나에 Claude를 9번 호출해요 (팀장 분배 1 + 직원 7 + 최종 보고 1).
+팀장 마루가 업무를 보고 꼭 필요한 팀원만(1~4명) 불러요. 나머지는 라운지에서 쉬어요.
+Claude 호출 수 = 팀장 분배 1 + 참여 팀원 수 + 최종 보고 1 (참여자가 1명이면 최종 보고 생략) → 업무당 2~6번.
 
 ## 직원 바꾸기
 
