@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>마루네 동물 오피스</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@2.39.9/dist/galmuri.css">
+<style>
+  :root { --cream:#fbf8f6; --ink:#5b4e5e; --pink:#d4a2b4; --lilac:#a99bc4; --tag:#a99bc4; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Galmuri11","Malgun Gothic",sans-serif; color:var(--ink); min-height:100vh; background:#efe9ec; }
+  header { text-align:center; padding:14px 16px 6px; }
+  header h1 { display:inline-block; margin:0; padding:8px 22px; font-size:22px; background:var(--cream);
+    border:4px solid var(--ink); border-radius:999px; box-shadow:0 5px 0 var(--ink); }
+  .wrap { max-width:1060px; margin:14px auto 0; padding:0 16px 24px; display:grid; gap:16px; grid-template-columns:1fr 260px; }
+  @media (max-width:820px){ .wrap { grid-template-columns:1fr; } }
+
+  .floors { display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+  .floors button { background:var(--cream); color:var(--ink); }
+  .floors button.on { background:var(--lilac); color:#fff; }
+  .floors small { opacity:.8; }
+
+  .room { position:relative; aspect-ratio:256/160; border:6px solid var(--ink); border-radius:14px; overflow:hidden; background:#f7c6d9; }
+  .room > canvas.bg { position:absolute; inset:0; width:100%; height:100%; image-rendering:pixelated; }
+  .dog { position:absolute; width:6.25%; aspect-ratio:1; transition-property:left,top; transition-timing-function:linear; cursor:pointer; }
+  .dog canvas { width:100%; height:100%; image-rendering:pixelated; display:block; }
+  .dog.left canvas { transform:scaleX(-1); }
+  .dog.out { opacity:0; transition:opacity .4s; }
+  .tag { position:absolute; top:100%; left:50%; transform:translateX(-50%); font-size:10px; white-space:nowrap;
+    background:var(--cream); border:2px solid var(--ink); border-radius:6px; padding:0 4px; }
+  .emote { position:absolute; bottom:105%; left:50%; transform:translateX(-50%); font-size:12px; min-width:22px; text-align:center;
+    background:#fff; border:2px solid var(--ink); border-radius:8px; padding:1px 4px; display:none; white-space:nowrap; }
+  .emote.show { display:block; animation:pop .25s steps(3); }
+  .pbar { position:absolute; top:-12%; left:0; right:0; height:5px; border:1px solid var(--ink); background:#fff; display:none; }
+  .pbar i { display:block; height:100%; width:0; background:var(--pink); }
+  .working .pbar { display:block; }
+  .dog.working { animation:bob .4s steps(2) infinite; }
+  .dog.happy { animation:hop .35s steps(2) 3; }
+  @keyframes bob { 50% { transform:translateY(-6%); } }
+  @keyframes hop { 50% { transform:translateY(-22%); } }
+  @keyframes pop { from { transform:translateX(-50%) scale(.3); } }
+  .room.fade::after { content:""; position:absolute; inset:0; background:#fff; animation:flash .35s ease-out forwards; }
+  @keyframes flash { from { opacity:.8; } to { opacity:0; } }
+
+  /* 동숲풍 대화창 */
+  .talk { position:absolute; left:8%; right:8%; bottom:3%; min-height:18%; background:var(--cream);
+    border-radius:40px / 30px; padding:14px 26px 10px; font-size:clamp(11px,1.6vw,15px); line-height:1.5;
+    box-shadow:0 4px 0 rgba(106,74,120,.35); display:none; cursor:pointer; z-index:5; }
+  .talk.show { display:block; animation:pop2 .2s ease-out; }
+  @keyframes pop2 { from { transform:scale(.9); opacity:0; } }
+  .talk .who { position:absolute; top:-14px; left:24px; background:var(--tag); color:#fff; padding:2px 14px;
+    border-radius:999px; transform:rotate(-4deg); font-size:13px; }
+  .talk .more { position:absolute; right:22px; bottom:6px; color:var(--pink); animation:blink .6s steps(2) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+
+  .side { display:flex; flex-direction:column; gap:12px; }
+  .card { background:var(--cream); border:4px solid var(--ink); border-radius:16px; padding:10px 12px; }
+  .card h2 { margin:0 0 8px; font-size:14px; }
+  #board { list-style:none; margin:0; padding:0; font-size:12px; display:grid; gap:4px; }
+  #board li { display:flex; justify-content:space-between; gap:4px; }
+  .st { padding:0 6px; border-radius:6px; white-space:nowrap; }
+  .st.work { background:#f0dde3; } .st.idle { background:#e6e2ee; } .st.stuck { background:#f2d0cc; } .st.out { background:#dde9ef; }
+  #log { list-style:none; margin:0; padding:0; font-size:12px; max-height:240px; overflow:auto; display:flex; flex-direction:column-reverse;
+    background:repeating-linear-gradient(#fbf8f6 0 19px,#ece4e6 19px 20px); }
+  #log li { line-height:20px; }
+  .badge { display:inline-block; margin-top:8px; padding:2px 12px; font-size:12px; background:var(--cream); border:2px solid var(--ink); border-radius:999px; }
+  #report { list-style:none; margin:0; padding:0; font-size:12px; max-height:320px; overflow:auto; display:grid; gap:8px; }
+  #report li { background:#f1edf3; border-radius:10px; padding:6px 8px; }
+  #report p { margin:4px 0 0; white-space:pre-wrap; line-height:1.5; }
+  #report:empty::before { content:"업무를 시키면 여기에 결과가 쌓여요"; opacity:.6; }
+  .talk .txt { white-space:pre-line; }
+
+  form { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+  input { flex:1; min-width:180px; padding:10px 16px; border:4px solid var(--ink); border-radius:999px; font:inherit; background:var(--cream); color:var(--ink); }
+  button { padding:8px 14px; border:4px solid var(--ink); border-radius:999px; background:var(--pink); color:#fff; font:inherit; cursor:pointer; box-shadow:0 4px 0 var(--ink); }
+  button:active { transform:translateY(3px); box-shadow:0 1px 0 var(--ink); }
+  button.sub { background:var(--cream); color:var(--ink); }
+  button:disabled { opacity:.5; cursor:wait; }
+</style>
+</head>
+<body>
+<header><h1>🌸 마루네 동물 오피스</h1><br><span class="badge" id="mode">연결 확인 중...</span></header>
+
+<div class="wrap">
+  <div>
+    <div class="floors" id="floors"></div>
+    <div class="room" id="room">
+      <canvas class="bg" id="bg" width="256" height="160"></canvas>
+      <div class="talk" id="talk"><span class="who"></span><span class="txt"></span><span class="more">▼</span></div>
+    </div>
+    <form id="form">
+      <input id="task" placeholder="업무를 던져주세요! 예) 신메뉴 이벤트 기획" autocomplete="off" required>
+      <button id="go">일 시키기 🐾</button>
+      <button type="button" class="sub" id="snack">🦴 간식</button>
+      <button type="button" class="sub" id="walk">🌷 옥상 산책</button>
+      <button type="button" class="sub" id="mute">🔊</button>
+    </form>
+  </div>
+  <div class="side">
+    <div class="card"><h2>📌 출근부</h2><ul id="board"></ul></div>
+    <div class="card"><h2>📑 결과 보고서</h2><ul id="report"></ul></div>
+    <div class="card"><h2>📒 업무 일지</h2><ul id="log"></ul></div>
+  </div>
+</div>
+
+<script>
+// 원작 캐릭터 이름으로 바꿔 끼우세요. 첫 번째가 팀장(업무 분배 담당).
+// species: 없으면 강아지 / cat / fox / rabbit,  fur=털, ear=귀, dark=외곽선
+const STAFF = [
+  { name:"마루", role:"팀장", fur:"#ffffff", ear:"#f1dcc4", dark:"#6b4a2b", quirk:"마루가 할게! 멍!", verb:"전체 계획 세우기" },
+  { name:"초코", role:"개발", fur:"#c98f5e", ear:"#7a4a2a", dark:"#4a2c17", quirk:"코드는 냄새로 짜는 거야", verb:"기능 구현하기" },
+  { name:"두부", role:"디자인", fur:"#fff4e0", ear:"#ffc98a", dark:"#7a5530", quirk:"분홍색 더 넣을까?", verb:"시안 그리기" },
+  { name:"보리", role:"리서치", fur:"#f0cf8e", ear:"#c99545", dark:"#6b4a20", quirk:"킁킁... 자료 냄새가 나", verb:"자료 조사하기" },
+  { name:"콩이", role:"QA", fur:"#dcdcdc", ear:"#8c8c8c", dark:"#454545", quirk:"버그 물어왔어!", verb:"꼼꼼히 검수하기" },
+  { name:"나비", species:"cat", role:"마케팅", fur:"#f4b26b", ear:"#ffb3a7", dark:"#7a4a1f", quirk:"냐옹~ 홍보는 나한테 맡겨", verb:"홍보 문구 쓰기" },
+  { name:"눈송이", species:"fox", role:"데이터", fur:"#ffffff", ear:"#cfe0ee", dark:"#5a6b7a", quirk:"북극에서 왔다구! 히히", verb:"숫자 분석하기" },
+  { name:"깡총이", species:"rabbit", role:"일정관리", fur:"#fbe9f0", ear:"#ffb6cf", dark:"#7a4a5a", quirk:"마감은 지켜야지 깡총!", verb:"일정 짜기" },
+];
+
+// ---------- 픽셀 스프라이트 (16x16, 오리지널) ----------
+const HEAD = [
+  "................",
+  "..oooo....oooo..",
+  ".oeeeeooooeeeeo.",
+  ".oeeffffffffeeo.",
+  ".oeffffffffffeo.",
+  ".oefkwffffkwfeo.",
+  ".oefkkffffkkfeo.",
+  "..ofpffkkffpfo..",
+  "..offfffttfffo..",
+  "...offffffffo...",
+  "....oooooooo....",
+];
+const FACE = [                // 고양이·여우·토끼 공용 얼굴 아랫부분
+  ".offffffffffffo.",
+  ".offkwffffkwffo.",
+  ".offkkffffkkffo.",
+  ".ofpfffkkfffpfo.",
+  "..offfffttfffo..",
+  "...offffffffo...",
+  "....oooooooo....",
+];
+const HEADS = {
+  cat: [".o............o.", ".oo..........oo.", ".oeo........oeo.", ".oeeooooooooeeo.", ...FACE],
+  rabbit: ["...oooo..oooo...", "...oeeo..oeeo...", "...oeeo..oeeo...", "..ooeeooooeeoo..", ...FACE],
+  fox: [".oo..........oo.", ".oeo........oeo.", ".oeeo......oeeo.", ".oeeeooooooeeeo.", FACE[0], FACE[1], FACE[2],
+        "..ofpffkkffpfo..", "...offfttfffo...", "....offffffo....", ".....oooooo....."],
+};
+const BODY = [
+  ["...offffffffof..", "...offffffffo...", "....off..ffo....", "....oo....oo....", "................"],
+  ["...offffffffo...", "...offffffffof..", "...off....ffo...", "...oo......oo...", "................"],
+];
+function drawDog(ctx, p, frame) {
+  const pal = { o:p.dark, f:p.fur, e:p.ear, k:"#2b2018", w:"#ffffff", p:"#ffadc2", t:"#ff7f9a" };
+  ctx.clearRect(0, 0, 16, 16);
+  let body = BODY[frame];
+  if (p.species === "fox") body = body.map(r => r.replace("of..", "off."));   // 복슬 꼬리
+  [...(HEADS[p.species] || HEAD), ...body].forEach((row, y) => [...row].forEach((c, x) => {
+    if (pal[c]) { ctx.fillStyle = pal[c]; ctx.fillRect(x, y, 1, 1); }
+  }));
+}
+
+// ---------- 층 (256x160) ----------
+const DESKS = STAFF.map((_, i) => [10 + i * 30, 50]);   // ponytail: 한 줄 배치라 최대 8명, 더 늘리면 두 번째 줄 추가
+const ELEV = [17, 24], SOFA = [14, 118];
+const FLOORS = {
+  1: { name:"1F 라운지", wall:"#f4ecea", stripe:"#efe4e2", floor:"#e6d5d0", line:"#d9c5bf", zone:[80,92,88,34] },
+  2: { name:"2F 사무실", wall:"#eeebf2", stripe:"#e8e4ee", floor:"#dcd6e3", line:"#cec7d8" },
+  3: { name:"3F 옥상정원", wall:"#e9eef5", stripe:"#eef0f6", floor:"#d3e3cc", line:"#c6d9be", zone:[60,64,150,66] },
+};
+function drawRoom(f) {
+  const F = FLOORS[f], c = document.getElementById("bg").getContext("2d");
+  const r = (x,y,w,h,col) => { c.fillStyle = col; c.fillRect(x,y,w,h); };
+  const plant = (x,y) => { r(x,y+10,10,8,"#e6a3c3"); r(x-2,y,6,10,"#79b98a"); r(x+4,y-3,6,13,"#9ad3a4"); r(x+8,y+2,5,8,"#79b98a"); };
+  r(0,0,256,40,F.wall); for (let x=0;x<256;x+=8) r(x,0,3,40,F.stripe);
+  r(0,41,256,119,F.floor);
+  if (f === 3) {   // 옥상: 하늘·구름·울타리·잔디
+    for (let x=0;x<256;x+=6) r(x,41,2,119,F.line);
+    [[40,8],[150,14],[210,6]].forEach(([x,y]) => { r(x,y,22,6,"#fff"); r(x+5,y-4,12,4,"#fff"); });
+    for (let x=0;x<256;x+=10) r(x,30,3,12,"#fff"); r(0,32,256,2,"#fff"); r(0,38,256,2,"#fff");
+    r(60,96,150,10,"#f6dbe8"); for (let x=60;x<210;x+=12) r(x,96,1,10,"#e9bfd3");                     // 돌길
+    [[30,60],[200,56],[110,128],[180,124]].forEach(([x,y]) => { r(x,y,28,14,"#a8d99c");                // 꽃밭
+      for (let i=0;i<6;i++) { r(x+3+i*4,y+3+(i%2)*5,3,3,["#ff9ec7","#c9a3f5","#fff"][i%3]); } });
+    r(130,60,40,5,"#c98fb0"); r(132,65,3,6,"#9a6680"); r(165,65,3,6,"#9a6680");                        // 벤치
+    r(226,44,8,30,"#a07858"); r(214,26,32,22,"#f2a7c8"); r(218,22,24,8,"#f7c1da");                     // 벚꽃나무
+  } else {
+    r(0,38,256,3,"#cbbcc4");
+    for (let y=41;y<160;y+=10) { r(0,y,256,1,F.line); for (let x=(y%20?0:24);x<256;x+=48) r(x,y,1,10,F.line); }
+    r(104,8,48,24,"#a596ad"); r(107,11,42,18,"#d6efff"); r(127,11,2,18,"#a596ad"); r(107,19,42,2,"#a596ad"); r(110,13,6,3,"#fff");
+  }
+  if (f === 1) {
+    r(76,92,104,50,"#c8bfd8"); r(78,94,100,46,"#ddd6e8");                                              // 러그
+    for (let x=86;x<176;x+=16) for (let y=100;y<138;y+=12) { r(x,y,3,3,"#f6f2f8"); r(x+1,y+1,1,1,"#d4a2b4"); }
+    r(6,120,46,22,"#c9b9d6"); r(6,116,46,8,"#b8a6c8"); r(4,120,4,20,"#b8a6c8"); r(50,120,4,20,"#b8a6c8"); // 소파
+    r(200,14,20,26,"#d4a2b4"); r(203,17,14,10,"#f7eef1"); r(206,30,8,4,"#a87888");                     // 커피머신
+    r(60,14,22,16,"#fff"); r(60,14,22,2,"#d4a2b4"); r(63,19,12,1,"#ccc"); r(63,23,16,1,"#ccc");       // 공지판
+    plant(236,128); plant(60,124); plant(232,22);
+  }
+  if (f === 2) {
+    r(196,10,44,30,"#9c8aa8"); [[198,12],[198,26]].forEach(([x,y]) => { for (let i=0;i<9;i++) r(x+i*4+1,y,3,11,["#d4a2b4","#a9c2d8","#e2cf9e","#b3a5cc"][i%4]); });
+    r(56,10,36,22,"#fff"); r(56,10,36,2,"#a99bc4"); r(60,16,20,1,"#c9b"); r(60,22,26,1,"#c9b");         // 화이트보드
+    DESKS.forEach(([x,y]) => { r(x-4,y+12,24,10,"#b49a8c"); r(x-4,y+12,24,3,"#c9b0a2"); r(x-2,y+22,3,6,"#8c7468"); r(x+15,y+22,3,6,"#8c7468");
+      r(x+2,y+5,12,8,"#5a4e5e"); r(x+3,y+6,10,5,"#e6eef0"); r(x+7,y+13,2,1,"#5a4a6a"); });
+    plant(236,128); plant(10,128);
+  }
+  r(12,6,24,34,"#a99bc4"); r(14,10,20,30,"#eeebf3"); r(23,10,2,30,"#a99bc4"); r(20,7,8,2,"#d4a2b4");    // 엘리베이터
+}
+
+// ---------- 소리 (동숲풍 삐약 말소리) ----------
+let ac, muted = false;
+function tone(freq, len, vol = 0.03, type = "square") {
+  if (muted) return;
+  ac ??= new AudioContext();
+  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + len);
+  o.connect(g).connect(ac.destination); o.start(); o.stop(t + len);
+}
+const blip = () => tone(380 + Math.random() * 320, 0.06);
+const ding = () => { tone(880, .25, .04, "sine"); setTimeout(() => tone(660, .35, .04, "sine"), 180); };
+
+// ---------- 대화창 ----------
+const talk = document.getElementById("talk"), queue = [];
+let talking = false, skip = null;
+function say(name, text) { queue.push([name, text]); if (!talking) nextLine(); }
+async function nextLine() {
+  if (!queue.length) { talking = false; talk.classList.remove("show"); return; }
+  talking = true;
+  const [name, text] = queue.shift();
+  talk.querySelector(".who").textContent = name;
+  const t = talk.querySelector(".txt"), more = talk.querySelector(".more");
+  talk.classList.add("show"); more.style.display = "none"; t.textContent = "";
+  let fast = false; skip = () => fast = true;
+  for (const ch of text) { t.textContent += ch; if (ch.trim()) blip(); if (!fast) await sleep(45); }
+  more.style.display = "";
+  await new Promise(res => { skip = res; setTimeout(res, queue.length ? 900 : 1800); });
+  nextLine();
+}
+talk.onclick = () => skip?.();
+
+// ---------- 동물들 ----------
+const room = document.getElementById("room"), sleep = ms => new Promise(r => setTimeout(r, ms));
+let view = 1;
+const dogs = STAFF.map((p, i) => {
+  const el = document.createElement("div");
+  el.className = "dog";
+  el.innerHTML = `<div class="emote"></div><canvas width="16" height="16"></canvas><div class="tag">${p.name}</div><div class="pbar"><i></i></div>`;
+  const d = { p, el, ctx: el.querySelector("canvas").getContext("2d"), x: 78 + i * 12, y: 98 + (i % 2) * 18, floor: 1, state: "idle", moving: false, lock: false };
+  drawDog(d.ctx, p, 0); place(d);
+  el.onclick = () => { emote(d, "♪"); say(p.name, d.result ? short(d.result) : p.quirk); };
+  room.insertBefore(el, talk);
+  return d;
+});
+function place(d) { d.el.style.left = d.x / 256 * 100 + "%"; d.el.style.top = d.y / 160 * 100 + "%"; }
+function emote(d, txt, ms = 1600) {
+  const e = d.el.querySelector(".emote"); e.textContent = txt; e.classList.remove("show"); void e.offsetWidth; e.classList.add("show");
+  clearTimeout(e.t); if (ms) e.t = setTimeout(() => e.classList.remove("show"), ms);
+}
+async function moveTo(d, x, y) {
+  const dist = Math.hypot(x - d.x, y - d.y), dur = dist / 40 * 1000;
+  d.el.classList.toggle("left", x < d.x);
+  d.el.style.transitionDuration = dur + "ms";
+  d.moving = true; d.x = x; d.y = y; place(d);
+  let f = 0; const anim = setInterval(() => drawDog(d.ctx, d.p, f ^= 1), 160);
+  await sleep(dur); clearInterval(anim); drawDog(d.ctx, d.p, 0); d.moving = false;
+}
+// 엘리베이터 타고 층 이동
+async function goFloor(d, f) {
+  if (d.floor === f) return;
+  d.lock = true;
+  await moveTo(d, ...ELEV);
+  d.el.classList.add("out"); await sleep(450);
+  if (d.floor === view) ding();
+  d.floor = f; d.el.style.transitionDuration = "0ms"; [d.x, d.y] = ELEV; place(d); refresh();
+  await sleep(350);
+  if (f === view) ding();
+  d.el.classList.remove("out");
+  await moveTo(d, ELEV[0] + 6, ELEV[1] + 22);
+  d.lock = false;
+}
+
+// 쉬는 애들은 1F 러그, 산책하는 애들은 3F 정원을 어슬렁
+setInterval(() => dogs.forEach(d => {
+  if (d.moving || d.lock || Math.random() < .55) return;
+  const zone = d.state === "idle" && d.floor === 1 ? FLOORS[1].zone : d.state === "out" && d.floor === 3 ? FLOORS[3].zone : null;
+  if (!zone) return;
+  if (d.floor === 1 && Math.random() < .2) { moveTo(d, SOFA[0] + Math.random() * 30, SOFA[1] - 4).then(() => d.state === "idle" && emote(d, "zZ", 2500)); return; }
+  const [zx, zy, zw, zh] = zone;
+  moveTo(d, zx + Math.random() * zw, zy + Math.random() * zh).then(() => Math.random() < .3 && emote(d, ["♪","!","…","💕","🌸"][Math.floor(Math.random()*5)]));
+}), 2200);
+
+// ---------- 층 탭 / 상태 보드 / 일지 ----------
+function setView(f) {
+  if (f === view) return;
+  view = f; drawRoom(f); refresh();
+  room.classList.remove("fade"); void room.offsetWidth; room.classList.add("fade");
+  clearTimeout(room.t); room.t = setTimeout(() => room.classList.remove("fade"), 400);
+}
+const LABEL = { idle:["쉬는 중","idle"], work:["일하는 중","work"], stuck:["막힘!","stuck"], out:["산책 중","out"] };
+function refresh() {
+  dogs.forEach(d => d.el.style.display = d.floor === view ? "" : "none");
+  document.getElementById("floors").innerHTML = [3, 2, 1].map(f =>
+    `<button type="button" class="${f === view ? "on" : ""}" data-f="${f}">${FLOORS[f].name} <small>🐾${dogs.filter(d => d.floor === f).length}</small></button>`).join("");
+  document.getElementById("board").innerHTML = dogs.map(d =>
+    `<li><span>${d.p.name} <small>${d.p.role}</small></span><span class="st ${LABEL[d.state][1]}">${d.floor}F · ${LABEL[d.state][0]}</span></li>`).join("");
+}
+document.getElementById("floors").onclick = e => { const b = e.target.closest("button"); if (b) setView(+b.dataset.f); };
+function setState(d, s) { d.state = s; refresh(); }
+function addLog(t) {
+  const li = document.createElement("li");
+  li.textContent = `${new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"})} ${t}`;
+  document.getElementById("log").append(li);
+}
+
+// ---------- Claude 연결 (server.py 로 열면 진짜 AI, 아니면 연출 모드) ----------
+let AI = false;
+const setMode = t => document.getElementById("mode").textContent = t;
+fetch("/api/status").then(r => r.json())
+  .then(s => { AI = s.ai; setMode(s.ai ? `🤖 진짜 AI 모드 · ${s.model}` : `🎭 연출 모드 · ${s.why}`); })
+  .catch(() => setMode("🎭 연출 모드 · server.py 로 열면 진짜 AI가 켜져요"));
+async function ask(kind, d, task, notes = "") {
+  if (!AI) return null;
+  try {
+    const r = await fetch("/api/ask", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ kind, task, notes, who: { name:d.p.name, species:d.p.species, role:d.p.role, quirk:d.p.quirk, verb:d.p.verb } }) });
+    const j = await r.json();
+    if (j.error) addLog(`⚠️ ${d.p.name}: ${j.error}`);
+    return j.text?.replace(/\*\*/g, "") || null;   // 마크다운 굵게 기호는 그냥 지움
+  } catch { addLog(`⚠️ ${d.p.name}: 서버 연결 실패`); return null; }
+}
+const short = (t, n = 110) => t.length > n ? t.slice(0, n) + "… (보고서 참고)" : t;
+function report(title, text) {
+  const li = document.createElement("li");
+  li.innerHTML = "<b></b><p></p>";
+  li.querySelector("b").textContent = title; li.querySelector("p").textContent = text;
+  document.getElementById("report").prepend(li);
+}
+
+// ---------- 업무 흐름 ----------
+let busy = false;
+// job(Claude 응답)이 오기 전엔 진행바가 90%에서 기다림
+async function work(d, ms, job) {
+  const bar = d.el.querySelector(".pbar i"); bar.style.width = "0";
+  d.el.classList.add("working");
+  let done = !job; job?.finally(() => done = true);
+  let p = 0, start = performance.now(), stuckOnce = !AI && Math.random() < .25;
+  while (p < 100) {
+    await sleep(120);
+    if (stuckOnce && p > 50) {   // 가끔 막혀서 재시도 (ponytail: 연출용 랜덤, 실제 AI 붙이면 진짜 에러로 교체)
+      stuckOnce = false; setState(d, "stuck"); emote(d, "💦", 0);
+      say(d.p.name, "으앙... 여기서 막혔어. 잠깐만 다시 해볼게!"); addLog(`💦 ${d.p.name}: 막혔다가 재시도`);
+      const t = performance.now(); await sleep(1800); start += performance.now() - t;
+      setState(d, "work"); emote(d, "!");
+    }
+    const t = (performance.now() - start) / ms * 100;   // 실제 경과 시간 기준
+    p = Math.min(done ? 100 : 90, t); bar.style.width = p + "%";
+  }
+  d.el.classList.remove("working");
+}
+const hop = d => { d.el.classList.add("happy"); setTimeout(() => d.el.classList.remove("happy"), 1100); };
+async function run(task) {
+  busy = true; document.getElementById("go").disabled = true;
+  const [lead, ...crew] = dogs;
+  addLog(`📥 새 업무: "${task}"`);
+  say(lead.p.name, `"${task}"! 좋아, 다들 2층 사무실로 출발~`);
+  setState(lead, "work"); emote(lead, "!");
+  setTimeout(() => setView(2), 1800);   // 카메라가 2층으로 따라감
+  dogs.forEach(d => d.result = null);
+  const plan = ask("plan", lead, task);
+  await goFloor(lead, 2); await moveTo(lead, DESKS[0][0], DESKS[0][1] + 18);
+  emote(lead, "…", 0); await work(lead, 1500, plan); emote(lead, "!");
+  say(lead.p.name, short((await plan) || "각자 하나씩 맡아줘~ 화이팅!", 160));
+  addLog(`🐶 ${lead.p.name}: 업무를 ${crew.length}개로 나눔`);
+
+  await Promise.all(crew.map(async (d, i) => {
+    while (d.state === "out" || d.lock) await sleep(300);
+    setState(d, "work"); emote(d, "!");
+    const job = ask("part", d, task);
+    await sleep(i * 250);
+    await goFloor(d, 2);
+    await moveTo(d, DESKS[i + 1][0], DESKS[i + 1][1] + 18);
+    await work(d, 2500 + Math.random() * 3500, job);
+    d.result = await job;
+    if (d.result) report(`${d.p.name} · ${d.p.verb}`, d.result);
+    emote(d, AI && !d.result ? "💦" : "✓"); hop(d);
+    addLog(`✅ ${d.p.name}: ${d.p.verb} 완료`);
+  }));
+
+  const notes = crew.filter(d => d.result).map(d => `[${d.p.name} / ${d.p.role}]\n${d.result}`).join("\n\n");
+  emote(lead, "…", 0);
+  lead.result = notes ? await ask("summary", lead, task, notes) : null;
+  emote(lead, "✓");
+  if (lead.result) report(`🎉 ${lead.p.name} 최종 보고`, lead.result);
+  say(lead.p.name, lead.result ? short(lead.result, 160) : `보고 완료! "${task}" 끝! 다들 라운지에서 쉬자~ 🦴`);
+  addLog(`🎉 "${task}" 최종 보고 완료`);
+  dogs.forEach(hop);
+  await sleep(1200);
+  setTimeout(() => setView(1), 2200);
+  await Promise.all(dogs.map(async (d, i) => { await sleep(i * 300); await goFloor(d, 1); setState(d, "idle"); }));
+  busy = false; document.getElementById("go").disabled = false;
+}
+
+document.getElementById("form").onsubmit = e => {
+  e.preventDefault();
+  const inp = document.getElementById("task"), t = inp.value.trim();
+  if (t && !busy) { run(t); inp.value = ""; }
+};
+document.getElementById("snack").onclick = () => {
+  addLog("🦴 간식타임!");
+  dogs.forEach(d => { if (d.floor === view) { emote(d, "💕"); hop(d); } });
+  say("모두", "간식이다아아!! 🦴🦴🦴");
+};
+document.getElementById("walk").onclick = async () => {
+  const free = dogs.filter(d => d.state === "idle" && !d.moving && !d.lock);
+  if (!free.length) return say("마루", "지금은 다들 바빠!");
+  const d = free[Math.floor(Math.random() * free.length)];
+  setState(d, "out"); say(d.p.name, "옥상 정원 다녀올게~ 🌷"); addLog(`🌷 ${d.p.name} 옥상 산책`);
+  await goFloor(d, 3);
+  await sleep(9000);
+  await goFloor(d, 1);
+  setState(d, "idle"); emote(d, "♪"); addLog(`🏠 ${d.p.name} 라운지 복귀`);
+};
+document.getElementById("mute").onclick = e => { muted = !muted; e.target.textContent = muted ? "🔇" : "🔊"; };
+
+drawRoom(1); refresh();
+addLog("☀️ 출근 완료!");
+say("마루", "어서 와! 여긴 마루네 동물 오피스야. 위 버튼으로 층을 구경할 수 있어!");
+</script>
+</body>
+</html>
